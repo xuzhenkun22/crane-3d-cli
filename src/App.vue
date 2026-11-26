@@ -34,10 +34,11 @@ const action = ref('all')
 const viewModes = [{ id: 'iso', label: '轴测' }, { id: 'front', label: '正视' }, { id: 'side', label: '侧视' }, { id: 'top', label: '俯视' }]
 const mode = ref('iso')
 const rotating = ref(false), playing = ref(false), annotated = ref(false), expanded = ref(false)
-const viewer = ref(null), stage = ref(null), fileInput = ref(null)
+const viewer = ref(null), stage = ref(null), fullscreenButton = ref(null), fileInput = ref(null)
+const fallbackExpanded = ref(false)
 const message = ref(''), error = ref(''), busy = ref(false), exportingImage = ref(false)
 const activeSection = ref('workspace')
-let request = 0, messageTimer, fallbackExpanded = false
+let request = 0, messageTimer, fullscreenPending = false
 
 function syncDrafts() {
   for (const key of ['capacity', 'span', 'height']) {
@@ -145,27 +146,41 @@ function setView(id) {
   viewer.value?.onView(id)
 }
 function onFullscreenChange() {
-  expanded.value = document.fullscreenElement === stage.value || fallbackExpanded
-  nextTick(() => requestAnimationFrame(() => viewer.value?.refit()))
+  const wasExpanded = expanded.value
+  expanded.value = Boolean(stage.value && document.fullscreenElement === stage.value) || fallbackExpanded.value
+  if (wasExpanded !== expanded.value) {
+    nextTick(() => fullscreenButton.value?.focus({ preventScroll: true }))
+  }
 }
 async function toggleFullscreen() {
-  if (fallbackExpanded) {
-    fallbackExpanded = false
+  const element = stage.value
+  if (!element || fullscreenPending) return
+  if (fallbackExpanded.value) {
+    fallbackExpanded.value = false
     onFullscreenChange()
-  } else if (document.fullscreenElement === stage.value) {
-    await document.exitFullscreen()
-  } else {
-    try {
-      if (!stage.value?.requestFullscreen) throw new Error('Fullscreen unavailable')
-      await stage.value.requestFullscreen()
-    } catch {
-      fallbackExpanded = true
-      onFullscreenChange()
+    return
+  }
+  fullscreenPending = true
+  try {
+    if (document.fullscreenElement === element) {
+      await document.exitFullscreen()
+    } else if (element.requestFullscreen) {
+      try { await element.requestFullscreen() } catch { fallbackExpanded.value = true }
+    } else {
+      fallbackExpanded.value = true
     }
+    onFullscreenChange()
+  } catch {
+    notify('暂时无法退出全屏，请按 Esc 返回')
+  } finally {
+    fullscreenPending = false
   }
 }
 function onKey(event) {
-  if (event.key === 'Escape' && fallbackExpanded) toggleFullscreen()
+  if (event.key === 'Escape' && fallbackExpanded.value) {
+    event.preventDefault()
+    toggleFullscreen()
+  }
 }
 function validateSelection() {
   const valid = fields.value.map(field => updateParameter(field, drafts[field.key], true)).every(Boolean)
@@ -222,7 +237,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <header class="site-header">
+  <header class="site-header" :inert="fallbackExpanded">
     <div class="shell header-inner">
       <a href="#workspace" class="brand" @click="activeSection = 'workspace'">
         <img src="/mark.svg" alt="" width="40" height="40" />
@@ -237,7 +252,7 @@ onBeforeUnmount(() => {
   </header>
 
   <main class="shell" id="workspace">
-    <section class="intro" aria-labelledby="main-title">
+    <section class="intro" aria-labelledby="main-title" :inert="fallbackExpanded">
       <div>
         <p class="eyebrow"><i></i> 起重设备 / 在线选型</p>
         <h1 id="main-title">起重机 <span>3D</span> 选型工作台</h1>
@@ -250,47 +265,48 @@ onBeforeUnmount(() => {
     </section>
 
     <div class="workbench">
-      <section ref="stage" class="stage panel" :class="{ 'stage-expanded': expanded }" aria-label="三维预览">
+      <section ref="stage" class="stage panel" :class="{ 'stage-expanded': expanded }" :role="fallbackExpanded ? 'dialog' : undefined" :aria-modal="fallbackExpanded ? true : undefined" aria-label="三维预览">
         <div class="stage-header">
           <div class="stage-heading"><Box :size="17" /> <strong>三维预览</strong><span class="live-tag"><i></i> 实时</span></div>
           <div class="stage-actions">
-            <button class="button tiny" type="button" title="自动旋转" :aria-pressed="rotating" @click="rotating = !rotating"><RotateCw :size="14" /> <span>自动旋转</span></button>
-            <button class="button tiny" type="button" title="结构标注" :aria-pressed="annotated" @click="annotated = !annotated"><Crosshair :size="14" /> <span>结构标注</span></button>
+            <button class="button tiny stage-option" type="button" title="自动旋转" aria-label="自动旋转" :aria-pressed="rotating" @click="rotating = !rotating"><RotateCw :size="14" /> <span>自动旋转</span></button>
+            <button class="button tiny stage-option" type="button" title="结构标注" aria-label="结构标注" :aria-pressed="annotated" @click="annotated = !annotated"><Crosshair :size="14" /> <span>结构标注</span></button>
+            <button ref="fullscreenButton" class="button tiny fullscreen-button" type="button" @click="toggleFullscreen"><Minimize v-if="expanded" :size="15" /><Expand v-else :size="15" />{{ expanded ? '退出全屏' : '全屏' }}</button>
           </div>
+        </div>
+        <div class="stage-meta">
+          <div class="scene-title">
+            <p><i></i><span>{{ product.code }}</span><span class="title-separator"></span>{{ product.category }}</p>
+            <div class="model-name"><h2>{{ product.name }}</h2><span v-if="product.model.reference" class="reference-tag">参考构型</span></div>
+          </div>
+          <span class="scene-description">{{ product.description }}</span>
+          <div class="preview-index"><span>{{ String(currentIndex).padStart(2, '0') }}</span> / {{ String(PRODUCTS.length).padStart(2, '0') }}</div>
         </div>
         <div class="scene">
           <CraneViewer ref="viewer" :product="product" :config="config" :rotating="rotating" :playing="playing" :action="action" :annotated="annotated" />
-          <div class="scene-title">
-            <p><i></i><span>{{ product.code }}</span><span class="title-separator"></span>{{ product.category }}</p>
-            <h2>{{ product.name }}</h2>
-            <span class="scene-description">{{ product.description }}</span>
-            <span v-if="product.model.reference" class="reference-tag">参考构型</span>
+        </div>
+        <div class="stage-bottom">
+          <div class="motion-tools">
+            <label class="select-wrap motion-select">
+              <span class="visually-hidden">演示机构</span>
+              <select v-model="action" @change="playing = false"><option value="all">整机循环</option><option v-for="motion in actions" :key="motion.id" :value="motion.id">{{ motion.label }}</option></select><ChevronDown :size="13" />
+            </label>
+            <button class="button amber play-button" type="button" :aria-pressed="playing" @click="playing = !playing">
+              <Pause v-if="playing" :size="15" fill="currentColor" /><Play v-else :size="15" fill="currentColor" />{{ playing ? '暂停演示' : '动作演示' }}
+            </button>
           </div>
-          <div class="preview-index"><span>{{ String(currentIndex).padStart(2, '0') }}</span> / {{ String(PRODUCTS.length).padStart(2, '0') }}</div>
-          <div class="stage-bottom">
-            <div class="motion-tools">
-              <label class="select-wrap motion-select">
-                <span class="visually-hidden">演示机构</span>
-                <select v-model="action" @change="playing = false"><option value="all">整机循环</option><option v-for="motion in actions" :key="motion.id" :value="motion.id">{{ motion.label }}</option></select><ChevronDown :size="13" />
-              </label>
-              <button class="button amber play-button" type="button" :aria-pressed="playing" @click="playing = !playing">
-                <Pause v-if="playing" :size="15" fill="currentColor" /><Play v-else :size="15" fill="currentColor" />{{ playing ? '暂停演示' : '动作演示' }}
-              </button>
-            </div>
-            <div class="view-tools" aria-label="视角与缩放工具">
-              <button v-for="view in viewModes" :key="view.id" class="view-mode" type="button" :aria-pressed="mode === view.id" @click="setView(view.id)">{{ view.label }}</button>
-              <i></i>
-              <button class="icon-button" type="button" title="缩小" aria-label="缩小" @click="viewer?.zoom(1.15)"><Minus :size="15" /></button>
-              <button class="icon-button" type="button" title="放大" aria-label="放大" @click="viewer?.zoom(0.87)"><Plus :size="15" /></button>
-              <button class="icon-button" type="button" title="重置视角" aria-label="重置视角" @click="setView('iso')"><RotateCcw :size="14" /></button>
-              <button class="icon-button" type="button" :title="expanded ? '退出全屏' : '全屏'" :aria-label="expanded ? '退出全屏' : '全屏'" @click="toggleFullscreen"><Minimize v-if="expanded" :size="15" /><Expand v-else :size="15" /></button>
-            </div>
+          <div class="view-tools" aria-label="视角与缩放工具">
+            <button v-for="view in viewModes" :key="view.id" class="view-mode" type="button" :aria-pressed="mode === view.id" @click="setView(view.id)">{{ view.label }}</button>
+            <i></i>
+            <button class="icon-button" type="button" title="缩小" aria-label="缩小" @click="viewer?.zoom(1.15)"><Minus :size="15" /></button>
+            <button class="icon-button" type="button" title="放大" aria-label="放大" @click="viewer?.zoom(0.87)"><Plus :size="15" /></button>
+            <button class="icon-button" type="button" title="重置视角" aria-label="重置视角" @click="setView('iso')"><RotateCcw :size="14" /></button>
           </div>
         </div>
         <div class="stage-footer"><span><span class="footer-light"></span> 可交互模型</span><span class="gesture">拖动旋转 · 滚轮缩放 · 右键平移</span><span class="footer-code">{{ product.code }} / 3D MODEL</span></div>
       </section>
 
-      <aside class="config panel" aria-labelledby="config-title">
+      <aside class="config panel" aria-labelledby="config-title" :inert="fallbackExpanded">
         <div class="config-header">
           <span class="config-icon"><SlidersHorizontal :size="18" /></span>
           <div><h2 id="config-title">选型配置</h2><p>PRODUCT CONFIGURATION</p></div>
@@ -330,7 +346,7 @@ onBeforeUnmount(() => {
       </aside>
     </div>
 
-    <section class="catalog" id="products" aria-labelledby="catalog-title">
+    <section class="catalog" id="products" aria-labelledby="catalog-title" :inert="fallbackExpanded">
       <div class="catalog-header"><div><p class="eyebrow"><i></i> PRODUCT SERIES</p><h2 id="catalog-title">产品系列 <span>{{ PRODUCTS.length }} 个型号</span></h2></div><p>产品类别 → 结构系列 → 具体型号 <ArrowRight :size="15" /></p></div>
       <div class="catalog-filters panel">
         <label class="field"><span>01 · 产品类别</span><span class="select-wrap"><select v-model="categoryId" :disabled="searching" @change="changeCategory"><option v-for="item in CATEGORIES" :key="item.id" :value="item.id">{{ item.name }}</option></select><ChevronDown :size="14" /></span></label>
@@ -347,7 +363,7 @@ onBeforeUnmount(() => {
       </div>
       <p v-else class="catalog-empty">未找到匹配的型号，请试试其他关键词。</p>
     </section>
-    <footer class="page-footer"><span>重构工业 · 起重设备选型</span><span>模型与参数仅供选型预览，不作为工程校核或正式规格。</span></footer>
+    <footer class="page-footer" :inert="fallbackExpanded"><span>重构工业 · 起重设备选型</span><span>模型与参数仅供选型预览，不作为工程校核或正式规格。</span></footer>
   </main>
   <div class="toast" role="status" :class="{ visible: message }"><Check :size="15" />{{ message }}</div>
 </template>

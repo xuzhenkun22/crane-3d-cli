@@ -23,20 +23,18 @@ const direction = {
   top: new T.Vector3(0, 1, 0.001).normalize(),
 }
 
-function frameModel(view = 'iso') {
+function frameModel(view = 'iso', preserveAngle = false) {
   if (!model || width <= 1 || height <= 1) return
   fitView = view
   const center = model.bounds.getCenter(new T.Vector3())
-  const normal = direction[view] ?? direction.iso
+  const normal = preserveAngle ? camera.position.clone().sub(controls.target).normalize() : direction[view] ?? direction.iso
   const right = new T.Vector3().crossVectors(new T.Vector3(0, 1, 0), normal).normalize()
   const up = new T.Vector3().crossVectors(normal, right).normalize()
   const vf = Math.tan(T.MathUtils.degToRad(camera.fov / 2))
   const hf = vf * camera.aspect
-  // Fit the actual parts (not empty corners of the whole bounding box) into the
-  // unobstructed scene area. Mobile titles sit above the model rather than beside it.
-  const compact = width < 720
-  const stacked = width <= 500 && !document.fullscreenElement
-  const [left, rightEdge, bottom, top] = compact ? [-0.89, 0.89, stacked ? -0.52 : -0.68, height < 340 ? 0.32 : 0.51] : [-0.48, 0.89, -0.73, 0.75]
+  // The metadata and controls are outside the canvas, so the rendered parts
+  // can be framed symmetrically in both the workspace and full screen.
+  const horizontalMargin = 0.88, verticalMargin = 0.82
   const points = fitMotion ? model.motionFraming(props.action, elapsed) : model.framingPoints
   const coordinates = points.map(point => {
     const delta = point.clone().sub(center)
@@ -46,10 +44,10 @@ function frameModel(view = 'iso') {
     let minX = -Infinity, maxX = Infinity, minY = -Infinity, maxY = Infinity
     for (const [x, y, z] of coordinates) {
       const depth = distance - z
-      minX = Math.max(minX, x - hf * depth * rightEdge)
-      maxX = Math.min(maxX, x - hf * depth * left)
-      minY = Math.max(minY, y - vf * depth * top)
-      maxY = Math.min(maxY, y - vf * depth * bottom)
+      minX = Math.max(minX, x - hf * depth * horizontalMargin)
+      maxX = Math.min(maxX, x + hf * depth * horizontalMargin)
+      minY = Math.max(minY, y - vf * depth * verticalMargin)
+      maxY = Math.min(maxY, y + vf * depth * verticalMargin)
     }
     return { minX, maxX, minY, maxY }
   }
@@ -75,12 +73,13 @@ function resize() {
   if (!renderer || !host.value) return
   const w = host.value.clientWidth, h = host.value.clientHeight
   if (!w || !h || (w === width && h === height)) return
+  const preserveAngle = width > 1 && height > 1
   width = w
   height = h
   renderer.setSize(width, height, false)
   camera.aspect = width / height
   camera.updateProjectionMatrix()
-  frameModel(fitView)
+  frameModel(fitView, preserveAngle)
 }
 
 function setTexture(surfaces, next) {
@@ -213,7 +212,7 @@ async function captureModel(w, h) {
   }
   return shot
 }
-defineExpose({ onView, zoom, resetMotion, captureModel, refit: () => frameModel(fitView) })
+defineExpose({ onView, zoom, resetMotion, captureModel })
 
 const projected = new T.Vector3()
 function draw(now) {
