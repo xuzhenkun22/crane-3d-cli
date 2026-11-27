@@ -1,1 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" rx="9" fill="#ffab3d"/><path d="M9 31l5-20h12l5 20M12 23h16M8 11h24M21 11v8c0 3 4 3 4 0" fill="none" stroke="#20150b" stroke-width="2.15" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
+  <defs>
+    <linearGradient id="graphite" x2="1" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#2a333d"/>
+      <stop offset="1" stop-color="#0e1218"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="7" y1="8" x2="32" y2="35" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff0c6"/>
+      <stop offset=".48" stop-color="#e8be75"/>
+      <stop offset="1" stop-color="#b97e3e"/>
+    </linearGradient>
+  </defs>
+  <rect x=".5" y=".5" width="39" height="39" rx="9" fill="url(#graphite)" stroke="#414a56"/>
+  <path fill="url(#gold)" d="M7 10h26l-2.5 4H9.5L7 10Zm5.2 6h3.6l-3.9 15H8.3l3.9-15Zm12 0h3.6l3.9 15h-3.6l-3.9-15Z"/>
+  <path d="M20 16v6.5c0 1.7-2.5 1.9-2.5 4.1 0 3.4 5.4 3.5 5.4-.1" fill="none" stroke="url(#gold)" stroke-width="2.4" stroke-linecap="round"/>
+</svg>
