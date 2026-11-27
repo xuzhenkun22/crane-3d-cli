@@ -41,7 +41,7 @@ export function buildMechanisms(api, profile, d, config) {
       : { start: left + distance * 0.46, end: right, y, z, top, gap, unit, aux: profile.auxHook }
     makeLift(parent, primary)
     if (profile.dual) makeLift(parent, { id: 'second', start: left + distance * 0.69, end: right, y, z, top, gap, unit,
-      trolleyAction: profile.sync ? 'trolley' : 'trolley2', liftAction: profile.sync ? 'lift' : 'lift2', labelText: profile.sync ? '同步葫芦' : '副小车' })
+      trolleyAction: profile.sync ? 'trolley' : 'trolley2', liftAction: profile.sync ? 'lift' : 'lift2', labelText: profile.sync && !profile.winch ? '同步葫芦' : '副小车' })
   }
 
   function overhead() {
@@ -59,7 +59,7 @@ export function buildMechanisms(api, profile, d, config) {
       makeLift(railway, { start: -xLimit * 0.36, end: xLimit, y, unit: u })
       return
     }
-    const top = profile.double && !profile.suspended
+    const top = profile.double && (!profile.suspended || profile.winch)
     const gap = profile.double ? Math.min(kbk ? width * 0.15 : width * 0.19, (kbk ? 0.95 : 1.30) * u) : 0
     const depth = (kbk ? 0.52 : 0.79) * u, h = kbk ? Math.min(0.36, g * 0.63) : g
     const bridgeLength = width + u * 0.62

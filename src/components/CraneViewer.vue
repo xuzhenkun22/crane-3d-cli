@@ -7,6 +7,7 @@ import { buildCrane, brandingTexture, ratingTexture } from '../three/crane.js'
 const props = defineProps({
   product: { type: Object, required: true }, config: { type: Object, required: true },
   rotating: Boolean, playing: Boolean, annotated: Boolean, action: { type: String, default: 'all' },
+  focusRegion: { type: Object, default: null },
 })
 const host = ref(null)
 const unavailable = ref(false)
@@ -15,7 +16,7 @@ const hasLabels = computed(() => props.annotated && !unavailable.value)
 let scene, camera, renderer, controls, resizeObserver, frame, model, sun, floor, grid, fitView = 'iso'
 let width = 1, height = 1, last = 0, elapsed = 0, brandRevision = 0, dirtyShadow = true
 let worldSize = 20, dirtyRender = true, loadedLogo = '', logoImage = null, fitMotion = false
-let brandingReady
+let brandingReady, framingArea
 const direction = {
   iso: new T.Vector3(0.64, 0.43, 1).normalize(),
   front: new T.Vector3(0, 0, 1),
@@ -32,9 +33,10 @@ function frameModel(view = 'iso', preserveAngle = false) {
   const up = new T.Vector3().crossVectors(normal, right).normalize()
   const vf = Math.tan(T.MathUtils.degToRad(camera.fov / 2))
   const hf = vf * camera.aspect
-  // The metadata and controls are outside the canvas, so the rendered parts
-  // can be framed symmetrically in both the workspace and full screen.
-  const horizontalMargin = 0.88, verticalMargin = 0.82
+  // Fit the actual part corners into the uncovered portion of the canvas,
+  // while still rendering the floor and grid behind the floating panels.
+  const { left, right: edge, top, bottom } = framingArea
+  const xHalf = 0.88 * (edge - left) / width, yHalf = 0.82 * (bottom - top) / height
   const points = fitMotion ? model.motionFraming(props.action, elapsed) : model.framingPoints
   const coordinates = points.map(point => {
     const delta = point.clone().sub(center)
@@ -44,15 +46,15 @@ function frameModel(view = 'iso', preserveAngle = false) {
     let minX = -Infinity, maxX = Infinity, minY = -Infinity, maxY = Infinity
     for (const [x, y, z] of coordinates) {
       const depth = distance - z
-      minX = Math.max(minX, x - hf * depth * horizontalMargin)
-      maxX = Math.min(maxX, x + hf * depth * horizontalMargin)
-      minY = Math.max(minY, y - vf * depth * verticalMargin)
-      maxY = Math.min(maxY, y + vf * depth * verticalMargin)
+      minX = Math.max(minX, x - hf * depth * xHalf)
+      maxX = Math.min(maxX, x + hf * depth * xHalf)
+      minY = Math.max(minY, y - vf * depth * yHalf)
+      maxY = Math.min(maxY, y + vf * depth * yHalf)
     }
     return { minX, maxX, minY, maxY }
   }
   let near = coordinates.reduce((max, point) => Math.max(max, point[2] + 0.2), worldSize * 0.35)
-  let far = worldSize * Math.max(8, 4 / camera.aspect)
+  let far = worldSize * Math.max(8 / Math.max(0.05, yHalf), 4 / (camera.aspect * Math.max(0.05, xHalf)))
   for (let i = 0; i < 16; i++) {
     const mid = (near + far) / 2
     const { minX, maxX, minY, maxY } = offsetRange(mid)
@@ -72,13 +74,28 @@ function frameModel(view = 'iso', preserveAngle = false) {
 function resize() {
   if (!renderer || !host.value) return
   const w = host.value.clientWidth, h = host.value.clientHeight
-  if (!w || !h || (w === width && h === height)) return
+  if (w <= 1 || h <= 1) return
+  const hostRect = host.value.getBoundingClientRect(), focus = props.focusRegion?.getBoundingClientRect()
+  const area = focus?.width > 1 && focus.height > 1
+    ? { left: focus.left - hostRect.left, top: focus.top - hostRect.top, right: focus.right - hostRect.left, bottom: focus.bottom - hostRect.top }
+    : { left: 0, top: 0, right: w, bottom: h }
+  const sizeChanged = w !== width || h !== height
+  if (!sizeChanged && framingArea && Object.keys(area).every(key => area[key] === framingArea[key])) return
   const preserveAngle = width > 1 && height > 1
-  width = w
-  height = h
-  renderer.setSize(width, height, false)
-  camera.aspect = width / height
-  camera.updateProjectionMatrix()
+  framingArea = area
+  if (sizeChanged) {
+    width = w
+    height = h
+    renderer.setSize(width, height, false)
+  }
+  // Shift the projection, not the orbit target, when only one side is open.
+  const shiftX = (width - area.left - area.right) / 2
+  const shiftY = (height - area.top - area.bottom) / 2
+  if (shiftX || shiftY) camera.setViewOffset(width, height, shiftX, shiftY, width, height)
+  else {
+    camera.aspect = width / height
+    camera.clearViewOffset()
+  }
   frameModel(fitView, preserveAngle)
 }
 
@@ -164,7 +181,7 @@ function resetMotion() {
   }
   dirtyRender = dirtyShadow = true
 }
-async function captureModel(w, h) {
+async function prepareCapture(w, h, action = null) {
   if (!renderer || !model || renderer.getContext().isContextLost()) return null
   const expected = model, branding = brandingReady
   await branding
@@ -173,19 +190,19 @@ async function captureModel(w, h) {
   const shot = document.createElement('canvas')
   shot.width = w
   shot.height = h
-  const ctx = shot.getContext('2d')
+  const ctx = shot.getContext('2d', action === null ? undefined : { willReadFrequently: true })
   if (!ctx) return null
   const background = ctx.createLinearGradient(0, 0, w, h)
   background.addColorStop(0, '#282e35')
   background.addColorStop(1, '#15191e')
   ctx.fillStyle = background
-  ctx.fillRect(0, 0, w, h)
 
-  // Keep the viewing direction and current pose, but fit the complete model even
-  // if the live camera has been panned or zoomed in.
+  // Fit the complete static pose for PNG, or the entire motion envelope for GIF.
+  // The capture camera keeps one fixed direction and never uses the panel offset.
   const captureCamera = camera.clone()
+  captureCamera.clearViewOffset()
   captureCamera.aspect = w / h
-  const points = model.poseFraming()
+  const points = action === null ? expected.poseFraming() : expected.motionFraming(action, elapsed)
   const center = new T.Box3().setFromPoints(points).getCenter(new T.Vector3())
   const inverse = camera.quaternion.clone().invert(), local = new T.Vector3()
   const vf = Math.tan(T.MathUtils.degToRad(camera.fov / 2)) * 0.85
@@ -197,22 +214,44 @@ async function captureModel(w, h) {
   captureCamera.position.copy(center).add(new T.Vector3(0, 0, distance).applyQuaternion(camera.quaternion))
   captureCamera.updateProjectionMatrix()
 
-  const pixelRatio = renderer.getPixelRatio()
-  try {
-    renderer.setPixelRatio(1)
-    renderer.setSize(w, h, false)
-    if (dirtyShadow) renderer.shadowMap.needsUpdate = true
-    renderer.render(scene, captureCamera)
-    // Copy immediately; the WebGL drawing buffer is not preserved across frames.
-    ctx.drawImage(renderer.domElement, 0, 0)
-  } finally {
-    renderer.setSize(width, height, false)
-    renderer.setPixelRatio(pixelRatio)
-    renderer.render(scene, camera)
+  function render(time) {
+    if (model !== expected || brandingReady !== branding) throw new Error('选型配置已更改，请重新导出')
+    if (renderer.getContext().isContextLost()) throw new Error('三维预览已断开，请刷新后重试')
+    const pixelRatio = renderer.getPixelRatio(), animated = action !== null
+    try {
+      if (animated) expected.pose(time, action)
+      renderer.setDrawingBufferSize(w, h, 1)
+      if (animated || dirtyShadow) renderer.shadowMap.needsUpdate = true
+      renderer.render(scene, captureCamera)
+      ctx.fillRect(0, 0, w, h)
+      // Copy before restoring the WebGL drawing buffer.
+      ctx.drawImage(renderer.domElement, 0, 0)
+    } finally {
+      if (animated) {
+        expected.pose(elapsed, props.action)
+        renderer.shadowMap.needsUpdate = true
+      }
+      renderer.setDrawingBufferSize(width, height, pixelRatio)
+      renderer.render(scene, camera)
+    }
   }
-  return shot
+  return { shot, render, ctx }
 }
-defineExpose({ onView, zoom, resetMotion, captureModel })
+async function captureModel(w, h) {
+  const capture = await prepareCapture(w, h)
+  if (!capture) return null
+  capture.render()
+  return capture.shot
+}
+async function captureAnimation(w, h, action) {
+  const capture = await prepareCapture(w, h, action)
+  if (!capture) return null
+  return time => {
+    capture.render(time)
+    return capture.ctx.getImageData(0, 0, w, h).data
+  }
+}
+defineExpose({ onView, zoom, resetMotion, captureModel, captureAnimation })
 
 const projected = new T.Vector3()
 function draw(now) {
@@ -229,7 +268,9 @@ function draw(now) {
     camera.updateMatrixWorld()
     labels.value = model.anchors.map(({ text, position }) => {
       projected.copy(position).project(camera)
-      return { text, x: (projected.x + 1) * width / 2, y: (1 - projected.y) * height / 2, visible: Math.abs(projected.x) < 0.89 && Math.abs(projected.y) < 0.81 && Math.abs(projected.z) <= 1 }
+      const x = (projected.x + 1) * width / 2, y = (1 - projected.y) * height / 2
+      const { left, right, top, bottom } = framingArea
+      return { text, x, y, visible: x > left + 8 && x < right - 30 && y > top + 15 && y < bottom && Math.abs(projected.z) <= 1 }
     })
   }
   if (dirtyShadow) {
@@ -294,6 +335,7 @@ onMounted(() => {
   rebuild(false)
   resizeObserver = new ResizeObserver(resize)
   resizeObserver.observe(host.value)
+  if (props.focusRegion) resizeObserver.observe(props.focusRegion)
   resize()
   frame = requestAnimationFrame(draw)
 })
@@ -307,6 +349,11 @@ watch(() => [props.product.id, props.config.capacity, props.config.span, props.c
     dirtyRender = true
   }
 })
+watch(() => props.focusRegion, (region, previous) => {
+  if (previous) resizeObserver?.unobserve(previous)
+  if (region) resizeObserver?.observe(region)
+  resize()
+}, { flush: 'post' })
 watch(() => props.action, resetMotion)
 watch(() => props.playing, playing => {
   if (playing && !fitMotion) {

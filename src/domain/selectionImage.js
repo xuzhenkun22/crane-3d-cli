@@ -1,31 +1,36 @@
-import { fieldsFor, selectionRecord } from './products.js'
+import { fieldsFor, resolvedModel, selectionRecord } from './products.js'
 
-export const MODEL_IMAGE_SIZE = { width: 1216, height: 800 }
+const PNG_SCALE = 2
+const modelLayout = { width: 1216, height: 800 }
+// Export the model at the same pixel density as the report, not as an upscale.
+export const MODEL_IMAGE_SIZE = Object.freeze({ width: modelLayout.width * PNG_SCALE, height: modelLayout.height * PNG_SCALE })
 
 export function selectionImageData(product, config) {
   const record = selectionRecord(product, config)
   return {
     code: record.型号,
-    title: record.产品,
+    title: record.预览构型 ?? record.产品,
     category: `${record.一级分类} / ${record.二级系列}`,
     parameters: fieldsFor(product, config).map(({ key, label, unit }) => [label, `${config[key]} ${unit}`]),
     options: Object.entries(record.构型),
     color: record.涂装,
     brand: record.品牌文字,
     logoName: record.Logo文件名,
-    reference: product.model.reference,
+    reference: resolvedModel(product, config).reference,
   }
 }
 
 export function createSelectionPng(modelImage, data) {
   const cardWidth = 488, margin = 48, gap = 28, top = 168
-  const { width, height } = MODEL_IMAGE_SIZE
+  const { width, height } = modelLayout
   const cardX = margin + width + gap
+  const reportWidth = cardX + cardWidth + margin, reportHeight = top + height + 86
   const canvas = document.createElement('canvas')
-  canvas.width = cardX + cardWidth + margin
-  canvas.height = top + height + 86
+  canvas.width = reportWidth * PNG_SCALE
+  canvas.height = reportHeight * PNG_SCALE
   const ctx = canvas.getContext('2d')
   if (!ctx) return Promise.reject(new Error('当前浏览器无法生成选型图片'))
+  ctx.scale(PNG_SCALE, PNG_SCALE)
   const dark = '#1b252f', muted = '#536575', stroke = '#dbe2e8', orange = '#b85d14'
   const font = '"Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", system-ui, sans-serif'
   ctx.textBaseline = 'middle'
@@ -45,7 +50,7 @@ export function createSelectionPng(modelImage, data) {
   }
 
   ctx.fillStyle = '#f1f4f6'
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  ctx.fillRect(0, 0, reportWidth, reportHeight)
   ctx.fillStyle = '#de8433'
   ctx.fillRect(margin, 42, 27, 4)
   text('起重设备 / 选型配置', margin + 42, 45, 20, orange, { weight: 650 })

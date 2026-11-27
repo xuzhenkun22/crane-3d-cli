@@ -151,10 +151,10 @@ function spec(c, category, series) {
 
 const profiles = {
   bridge: [[0.5, 1, 2, 3, 5, 10, 16], [6, 10.5, 16, 18, 22.5, 28], [3, 6, 9, 12, 15, 18]],
-  'bridge-double': [[3, 5, 10, 16, 20, 32, 50, 80, 125, 350], [8, 10.5, 16.5, 20, 22.5, 28.5, 36], [3, 6, 9, 12, 16, 20, 30]],
-  gantry: [[1, 3, 5, 10, 16, 20, 32], [6, 10, 14, 18, 22, 26, 32], [3, 6, 8, 9, 12, 15, 20]],
-  'gantry-double': [[3, 5, 10, 16, 20, 32, 50, 100, 200], [8, 12, 18, 24, 30, 36, 42], [4, 6, 9, 12, 18, 25, 35]],
-  hoist: [[0.2, 0.5, 1, 2, 3, 5, 10, 16, 25, 40], [2, 3, 4.5, 6, 9, 12, 18], [2, 3, 6, 9, 12, 18, 24, 36]],
+  'bridge-double': [[3, 5, 10, 16, 20, 25, 32, 50, 80, 125, 350], [8, 10.5, 16.5, 20, 22.5, 28.5, 36], [3, 6, 9, 12, 16, 20, 30]],
+  gantry: [[1, 3, 5, 10, 16, 20, 25, 32], [6, 10, 14, 18, 22, 26, 32], [3, 6, 8, 9, 12, 15, 20]],
+  'gantry-double': [[3, 5, 10, 16, 20, 25, 32, 50, 100, 200], [8, 12, 18, 24, 30, 36, 42], [4, 6, 9, 12, 18, 25, 35]],
+  hoist: [[0.2, 0.5, 1, 2, 3, 5, 10, 16, 25], [2, 3, 4.5, 6, 9, 12, 18], [2, 3, 6, 9, 12, 18, 24, 36]],
   light: [[0.1, 0.2, 0.3, 0.5, 1, 2, 3.2, 5], [1, 2, 3, 4, 6, 8, 10], [1, 2, 3, 4, 6, 8]],
   portal: [[5, 10, 16, 25, 40, 63, 100], [8, 15, 25, 32, 40, 50, 60], [8, 12, 20, 25, 35, 45, 60]],
   quay: [[30, 40, 50, 65, 80, 100, 120], [25, 35, 45, 55, 65, 75, 85], [14, 20, 30, 36, 42, 50, 60]],
@@ -208,11 +208,23 @@ export function defaultConfig(product) {
   return { ...product.defaults, options: Object.fromEntries(product.options.map(o => [o.key, o.initial])), color: product.color, text: '中国制造 Made In China', logo: '', logoName: '' }
 }
 
+export const HOIST_CAPACITY_LIMIT = 25
+
 export function resolvedModel(product, config) {
-  return { ...product.model, tool: config.options.tool ?? product.model.tool, fixed: config.options.mount === 'fixed', truss: config.options.beam === 'truss', overhang: config.options.overhang ?? 'none', uLeg: config.options.legs === 'u' }
+  const model = product.model
+  const capacityUpgrade = config.capacity > HOIST_CAPACITY_LIMIT && ['bridge', 'gantry'].includes(model.kind) && !model.winch
+  const winch = Boolean(model.winch || capacityUpgrade || ['quay', 'yard', 'shipyard'].includes(model.kind))
+  return { ...model, winch, capacityUpgrade, double: model.double || capacityUpgrade,
+    reference: model.reference || capacityUpgrade, tool: config.options.tool ?? model.tool,
+    fixed: config.options.mount === 'fixed', truss: config.options.beam === 'truss', overhang: config.options.overhang ?? 'none', uLeg: config.options.legs === 'u' }
 }
 
 const SPAN_CHOICES = Object.freeze([7.5, 10.5, 13.5, 16.5, 19.5, 22.5, 25.5])
+
+export function previewName(product, model) {
+  if (!model.capacityUpgrade) return product.name
+  return `双梁卷扬${model.semi ? '半门式起重机' : product.category}`
+}
 
 export function fieldsFor(product, config) {
   const m = resolvedModel(product, config)
@@ -280,10 +292,15 @@ export function actionsFor(product, config) {
 }
 
 export function selectionRecord(product, config) {
+  const model = resolvedModel(product, config)
   return {
     产品: product.name, 一级分类: product.category, 二级系列: product.seriesName, 型号: product.code, 目录编码: product.id, 系列: product.code,
+    ...(model.capacityUpgrade && { 预览构型: previewName(product, model) }),
     ...Object.fromEntries(fieldsFor(product, config).map(({ key, label, unit }) => [`${label}_${unit}`, config[key]])),
-    构型: Object.fromEntries(product.options.map(o => [o.label, o.values.find(v => v.id === config.options[o.key])?.name])),
+    构型: {
+      ...Object.fromEntries(product.options.map(o => [o.label, o.values.find(v => v.id === config.options[o.key])?.name])),
+      ...(model.winch && { 起升机构: model.capacityUpgrade ? '卷扬起重小车（双梁参考构型）' : '卷扬起重小车' }),
+    },
     涂装: config.color, 品牌文字: config.text, Logo文件名: config.logoName, Logo图像: config.logo || null,
     用途说明: '参数范围及模型仅用于选型示意，不作为工程校核、认证或正式规格。',
   }

@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@lucide/vue": "^1.80.0",
+    "gifenc": "^1.0.3",
     "three": "^0.183.0",
     "vue": "^3.5.0"
   },

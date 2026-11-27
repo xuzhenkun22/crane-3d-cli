@@ -1,88 +1,57 @@
+import { buildCarriage, buildHoistHardware } from './liftingHardware.js'
+
 // Trolleys and sheaves belong to the moving structure. Suspended loads are
 // posed in world axes, so their ropes stay plumb while a jib or boom turns.
 export function buildLifting(api, parent, profile, dimensions, settings) {
-  const { root, group, v, box, cylinder, tube, bar, plaque, label, teal, tealDark, steel, bolt, paint, edge, dark, wire, copper, safety, rubber, shade } = api
+  const { root, group, v, box, cylinder, chainLink, tube, bar, label, tealDark, steel, bolt, paint, edge, dark, wire, safety, shade } = api
   const { id = 'primary', start, end = start, z = 0, y, top = false, gap = 0, fixed = false, remote = false, branded = false,
     tool = profile.tool, trolleyAction = 'trolley', liftAction = 'lift', floorY = 0, height, unit = dimensions.trolley,
     aux = false, parkedX = null, toolWidth = 0, labelText } = settings
   const u = Math.max(0.16, unit)
   const carriage = remote ? parent : group(`trolley-${id}`, parent, start, y, z)
-  const wheels = []
-  const machineryY = top ? u * 0.38 : -u * (profile.compact ? 0.36 : 0.55)
-  const offsets = aux ? [-u * 0.47, u * 0.65] : [0]
+  const machineryY = top ? u * (profile.winch ? 0.73 : 0.59) : -u * (profile.winch ? 0.65 : profile.compact ? 0.40 : 0.53)
+  const offsets = aux ? [-u * 0.24, u * 0.46] : [0]
+  const wheels = remote ? [] : buildCarriage(api, carriage, u, { top, gap, fixed, winch: profile.winch })
+  const drums = remote ? [] : buildHoistHardware(api, carriage, profile, u, machineryY, { top, aux, branded })
   if (!remote) {
-    if (top) {
-      const gauge = Math.max(gap, 0.32 * u)
-      box(1.65 * u, 0.18 * u, gauge * 2 + 0.41 * u, 0, u * 0.19, 0, teal, carriage)
-      for (const lane of [-1, 1]) for (const x of [-0.61, 0.61]) {
-        const wheel = group('trolley-wheel', carriage, x * u, 0.12 * u, lane * gauge)
-        cylinder(0.12 * u, 0.18 * u, 0, 0, 0, steel, 'z', wheel)
-        box(0.19 * u, 0.035 * u, 0.035 * u, 0, 0, lane * 0.095 * u, bolt, wheel)
-        wheels.push(wheel)
-      }
-    } else if (fixed) {
-      box(0.98 * u, 0.15 * u, 0.60 * u, 0, 0, 0, steel, carriage)
-      for (const x of [-1, 1]) cylinder(0.055 * u, 0.22 * u, x * u * 0.36, 0, 0.26 * u, bolt, 'y', carriage)
-    } else {
-      box(1.18 * u, 0.12 * u, 0.48 * u, 0, -0.14 * u, 0, dark, carriage)
-      for (const x of [-0.44, 0.44]) for (const lane of [-1, 1]) {
-        const wheel = group('trolley-wheel', carriage, x * u, 0.125 * u, lane * 0.29 * u)
-        box(0.18 * u, 0.26 * u, 0.049 * u, x * u, 0, lane * 0.382 * u, dark, carriage)
-        cylinder(0.13 * u, 0.15 * u, 0, 0, 0, steel, 'z', wheel)
-        cylinder(0.055 * u, 0.16 * u, 0, 0, 0, bolt, 'z', wheel)
-        box(0.16 * u, 0.032 * u, 0.025 * u, 0, 0, lane * 0.093 * u, bolt, wheel)
-        wheels.push(wheel)
-      }
-    }
-    if (profile.winch) {
-      cylinder(0.34 * u, 0.90 * u, -0.10 * u, machineryY + 0.06 * u, 0, steel, 'x', carriage)
-      for (let i = -5; i <= 5; i++) cylinder(0.351 * u, 0.022 * u, (-0.10 + i * 0.073) * u, machineryY + 0.06 * u, 0, wire, 'x', carriage)
-      for (const x of [-0.57, 0.37]) cylinder(0.41 * u, 0.12 * u, x * u, machineryY + 0.06 * u, 0, dark, 'x', carriage)
-      box(0.46 * u, 0.66 * u, 0.63 * u, 0.61 * u, machineryY + 0.12 * u, 0, teal, carriage)
-      cylinder(0.22 * u, 0.56 * u, 0.1 * u, machineryY + 0.19 * u, -0.49 * u, tealDark, 'x', carriage)
-    } else if (profile.chain) {
-      box(0.70 * u, 0.48 * u, 0.43 * u, -0.02 * u, machineryY, 0, teal, carriage)
-      cylinder(0.25 * u, 0.37 * u, 0.36 * u, machineryY, 0, tealDark, 'x', carriage)
-      box(0.30 * u, 0.40 * u, 0.33 * u, -0.37 * u, machineryY - 0.31 * u, -0.04 * u, rubber, carriage)
-    } else {
-      if (profile.compact) {
-        if (profile.cover === 'SH') {
-          cylinder(0.28 * u, 1.05 * u, -0.07 * u, machineryY, 0, teal, 'x', carriage)
-          box(0.16 * u, 0.59 * u, 0.68 * u, -0.65 * u, machineryY, 0, tealDark, carriage)
-        } else {
-          box(1.22 * u, 0.56 * u, 0.66 * u, -0.05 * u, machineryY, 0, teal, carriage)
-          box(0.11 * u, 0.56 * u, 0.69 * u, -0.65 * u, machineryY, 0, tealDark, carriage)
-          if (profile.cover === 'DVR') box(0.76 * u, 0.18 * u, 0.58 * u, -0.03 * u, machineryY + 0.31 * u, 0, dark, carriage)
-        }
-      } else {
-        const r = (profile.heavy ? 0.42 : 0.36) * u
-        cylinder(r, 1.14 * u, -0.05 * u, machineryY, 0, teal, 'x', carriage)
-        for (const x of [-0.58, 0.52]) cylinder(r * 1.07, 0.15 * u, x * u, machineryY, 0, tealDark, 'x', carriage)
-      }
-      cylinder((profile.planetary ? 0.35 : 0.26) * u, 0.46 * u, 0.71 * u, machineryY, 0, teal, 'x', carriage)
-      for (let i = 0; i < 5; i++) cylinder(0.275 * u, 0.027 * u, (0.55 + i * 0.084) * u, machineryY, 0, tealDark, 'x', carriage)
-      if (profile.motorCount === 2) cylinder(0.19 * u, 0.43 * u, 0.26 * u, machineryY, -0.39 * u, tealDark, 'x', carriage)
-    }
-    if (aux) cylinder(0.24 * u, 0.49 * u, 0.48 * u, machineryY + 0.23 * u, 0.58 * u, steel, 'x', carriage)
-    if (branded) plaque(-0.10 * u, machineryY, 0.402 * u, 1.20 * u, 0.34 * u, carriage)
-    label(labelText ?? (profile.winch ? '卷扬小车' : profile.chain ? '环链葫芦' : fixed ? '固定式电动葫芦' : '电动葫芦'), 0, machineryY, 0.58 * u, carriage)
+    const title = profile.winch ? '卷扬起重小车' : profile.chain ? '环链葫芦' : fixed ? '固定式钢丝绳葫芦' : '钢丝绳电动葫芦'
+    label(labelText ?? title, 0, machineryY, 0.53 * u, carriage)
   }
 
   const loadUnits = offsets.map((offset, index) => {
     const kind = index ? 'hook' : tool
     const scale = u * (index ? 0.65 : 1)
-    const source = group(`reeving-${index ? 'aux' : id}`, carriage, offset, remote ? 0 : top ? 0.16 * u : machineryY - 0.27 * u, index ? 0.61 * u : 0)
+    const outletY = remote ? 0 : top ? 0.15 * u : machineryY - 0.32 * u
+    const source = group(`reeving-${index ? 'aux' : id}`, carriage, offset, outletY, index ? 0.59 * u : 0)
     const hanger = group(`load-${index ? 'aux' : id}`, root)
     const tackle = group(`attachment-${kind}`, hanger)
     const slingHalf = Math.max(0.49 * scale, toolWidth / 2)
-    const ropeOffsets = profile.chain ? [0] : kind === 'sling' ? [-slingHalf, slingHalf] : kind === 'spreader' ? [-0.48 * scale, 0.48 * scale] : [-0.16 * scale, 0.16 * scale]
-    const cables = ropeOffsets.map(x => cylinder((profile.chain ? 0.043 : 0.026) * scale, 1, x, 0, 0, wire, 'y', hanger))
+    const radius = (profile.winch ? 0.23 : 0.17) * scale
+    const ropeOffsets = profile.chain ? [] : kind === 'sling' ? [-slingHalf, slingHalf] : kind === 'spreader' ? [-0.48 * scale, 0.48 * scale] : [-radius, radius]
+    const cables = ropeOffsets.map(x => cylinder(0.021 * scale, 1, x, 0, 0, wire, 'y', hanger))
+    if (!remote && !profile.chain) {
+      const lead = Math.max(0.04 * u, machineryY - 0.24 * scale - outletY)
+      const separation = ropeOffsets[0] < -0.3 * scale ? 0.52 : 0.85
+      for (const x of ropeOffsets) tube([v(x * separation, lead, 0), v(x, lead * 0.3, 0), v(x, 0, 0)], 0.021 * scale, wire, source)
+    }
     const jaws = []
-    const head = kind === 'spreader' ? 0.54 : 0.44
     if (kind === 'sling') for (const x of ropeOffsets) box(0.34 * scale, 0.30 * scale, 0.27 * scale, x, 0, 0, tealDark, tackle)
-    else {
-      box(head * 1.38 * scale, 0.29 * scale, 0.35 * scale, 0, 0, 0, tealDark, tackle)
-      for (const x of [-0.14, 0.14]) cylinder(0.145 * scale, 0.37 * scale, x * scale, 0.035 * scale, 0, teal, 'z', tackle)
+    else if (kind === 'spreader') {
+      box(1.08 * scale, 0.29 * scale, 0.35 * scale, 0, 0, 0, tealDark, tackle)
+      for (const x of ropeOffsets) cylinder(0.11 * scale, 0.39 * scale, x, -0.015 * scale, 0, steel, 'z', tackle)
+    } else if (profile.chain) {
+      cylinder(0.14 * scale, 0.26 * scale, 0, -0.10 * scale, 0, steel, 'y', tackle)
+      cylinder(0.18 * scale, 0.085 * scale, 0, -0.09 * scale, 0, safety, 'y', tackle)
+    } else {
+      const sheave = group('hook-sheave', tackle)
+      cylinder(radius - 0.021 * scale, 0.132 * scale, 0, 0, 0, steel, 'z', sheave)
+      for (const z of [-0.08, 0.08]) cylinder(radius + 0.019 * scale, 0.028 * scale, 0, 0, z * scale, dark, 'z', sheave)
+      box(0.19 * scale, 0.24 * scale, 0.38 * scale, 0, -radius * 0.93, 0, dark, tackle)
+      for (const z of [-0.158, 0.158]) {
+        box(radius * 2.38, 0.27 * scale, 0.055 * scale, 0, -0.044 * scale, z * scale, safety, tackle)
+        cylinder(0.083 * scale, 0.095 * scale, 0, 0.015 * scale, z * scale, bolt, 'z', tackle)
+      }
+      tube([v(-radius, 0, 0), v(-radius * 0.72, -radius * 0.71, 0), v(0, -radius, 0), v(radius * 0.72, -radius * 0.71, 0), v(radius, 0, 0)], 0.021 * scale, wire, tackle)
     }
     if (kind === 'spreader') {
       const l = Math.max(3.2 * u, 2.4)
@@ -111,26 +80,30 @@ export function buildLifting(api, parent, profile, dimensions, settings) {
     } else {
       for (const side of (kind === 'foundry' ? [-1, 1] : [0])) {
         const p = (x, yy) => v((x + side * 0.31) * scale, yy * scale, 0)
-        tube([p(0, -0.12), p(-0.13, -0.41), p(-0.11, -0.57), p(0.04, -0.64), p(0.18, -0.55), p(0.19, -0.44)], 0.058 * scale, steel, tackle)
-        if (kind !== 'foundry') bar(p(0.00, -0.32), p(0.19, -0.45), 0.033 * scale, 0.029 * scale, copper, tackle)
+        cylinder(0.077 * scale, 0.22 * scale, side * 0.31 * scale, -0.237 * scale, 0, steel, 'y', tackle)
+        tube([p(0, -0.24), p(-0.025, -0.36), p(-0.147, -0.48), p(-0.13, -0.628), p(0.013, -0.70), p(0.158, -0.634), p(0.183, -0.506)], 0.053 * scale, steel, tackle).name = 'forged-hook'
+        if (kind !== 'foundry') bar(p(-0.013, -0.375), p(0.18, -0.508), 0.033 * scale, 0.048 * scale, safety, tackle).name = 'hook-latch'
       }
     }
     const toolName = { hook: '吊钩', foundry: '铸造吊钩', grab: '抓斗', magnet: '电磁吊具', spreader: '集装箱吊具', sling: '吊带' }
     label(index ? '副吊钩' : toolName[kind], 0, 0.04, 0.3 * scale, tackle)
-    const pos = v(0, 0, 0)
-    const chain = profile.chain ? Array.from({ length: 26 }, (_, i) => group('', hanger, 0, i, 0)) : []
-    for (let i = 0; i < chain.length; i++) cylinder(0.079 * scale, 0.027 * scale, 0, 0, 0, steel, i % 2 ? 'x' : 'z', chain[i])
-    return { source, hanger, tackle, cables, jaws, chain, pos, scale }
+    const chain = profile.chain ? Array.from({ length: 48 }, (_, i) => {
+      const link = chainLink(hanger, steel)
+      link.name = 'chain-link'
+      link.rotation.y = (i % 2) * Math.PI / 2
+      return link
+    }) : []
+    return { source, hanger, tackle, cables, jaws, chain, pos: v(0, 0, 0), axis: v(0, 0, 0), scale }
   })
 
   return function pose(motion) {
     if (!remote) {
       const phase = motion[trolleyAction] ?? 0
       carriage.position.x = parkedX != null && motion.boom != null ? start + (parkedX - start) * Math.min(1, motion.boom * 5) : start + (end - start) * phase
-      for (const wheel of wheels) wheel.rotation.z = (start - carriage.position.x) / (0.13 * u)
+      for (const { wheel, radius } of wheels) wheel.rotation.z = (start - carriage.position.x) / radius
     }
     loadUnits.forEach((load, index) => {
-      const { source, hanger, tackle, cables, jaws, chain, pos, scale } = load
+      const { source, hanger, tackle, cables, jaws, chain, pos, axis, scale } = load
       source.getWorldPosition(pos)
       const room = Math.max(0.24 * scale, pos.y - floorY - 0.98 * scale)
       const long = Math.max(0.39 * scale, Math.min(height * (index ? 0.40 : 0.58) + scale * 0.52, room))
@@ -138,14 +111,24 @@ export function buildLifting(api, parent, profile, dimensions, settings) {
       const lift = motion[index ? 'lift2' : liftAction] ?? 0
       const cableLength = long - (long - short) * lift
       hanger.position.copy(pos)
-      tackle.position.y = -cableLength - 0.12 * scale
+      // Follow the horizontal orientation of the moving boom, without tilting the ropes.
+      axis.set(1, 0, 0)
+      source.localToWorld(axis).sub(pos)
+      if (Math.hypot(axis.x, axis.z) > 1e-6) hanger.rotation.y = Math.atan2(-axis.z, axis.x)
+      tackle.position.y = -cableLength
+      if (drums[index]) drums[index].node.rotation.x = (long - cableLength) / (2 * drums[index].radius)
       for (const cable of cables) {
         cable.position.y = -cableLength / 2
         cable.scale.y = cableLength
       }
-      for (let i = 0; i < chain.length; i++) {
-        chain[i].position.y = -(i + 0.6) * 0.14 * scale
-        chain[i].visible = -chain[i].position.y < cableLength
+      if (chain.length) {
+        const count = Math.min(chain.length, Math.max(2, Math.round(cableLength / (0.14 * scale))))
+        const step = cableLength / count
+        for (let i = 0; i < chain.length; i++) {
+          chain[i].visible = i < count
+          chain[i].position.y = i < count ? -(i + 0.5) * step : 0
+          chain[i].scale.set(0.052 * scale, step * 0.68, 0.052 * scale)
+        }
       }
       for (const { jaw, sign } of jaws) jaw.rotation.z = sign * (0.08 + (motion.grab ?? 0) * 0.78)
     })

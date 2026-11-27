@@ -17,6 +17,7 @@ export function buildCrane(product, config) {
   const mats = { paint, edge, shade, dark, steel, bolt, teal, tealDark, rubber, safety, copper, wire, glass }
   const anchors = [], brands = [], rated = []
   const unitBox = new T.BoxGeometry(), unitCylinder = new T.CylinderGeometry(1, 1, 1, 16), placard = new T.PlaneGeometry(1, 1)
+  let unitLink
   const v = (x, y, z) => new T.Vector3(x, y, z)
 
   function mesh(geo, material, x, y, z, parent = root) {
@@ -44,6 +45,10 @@ export function buildCrane(product, config) {
     if (axis === 'x') obj.rotation.z = Math.PI / 2
     if (axis === 'z') obj.rotation.x = Math.PI / 2
     return obj
+  }
+  function chainLink(parent, material) {
+    unitLink ??= new T.TorusGeometry(1, 0.21, 5, 10)
+    return mesh(unitLink, material, 0, 0, 0, parent)
   }
   function fitBar(obj, a, end) {
     const dir = end.clone().sub(a)
@@ -163,7 +168,7 @@ export function buildCrane(product, config) {
     }
   }
 
-  const rig = buildMechanisms({ root, v, group, box, cylinder, bar, fitBar, tube, rail, girder, plaque, baseTruck, ladder, festoon, label, ...mats }, profile, dimensions, config)
+  const rig = buildMechanisms({ root, v, group, box, cylinder, chainLink, bar, fitBar, tube, rail, girder, plaque, baseTruck, ladder, festoon, label, ...mats }, profile, dimensions, config)
   const available = actionsFor(product, config).map(action => action.id)
   function pose(time = 0, action = 'all') {
     rig.pose(mechanismProgress(time, action, available))
@@ -228,18 +233,25 @@ export function buildCrane(product, config) {
   }
 }
 
+const segmentSeconds = 3.4
+const singleCycleSeconds = action => action === 'boom' ? 8 : 5.3
+
+export function mechanismCycleSeconds(action, available) {
+  if (action !== 'all') return available.includes(action) ? singleCycleSeconds(action) : 0
+  return segmentSeconds * available.filter(id => id !== 'boom').length
+}
+
 export function mechanismProgress(time, action, available) {
   const clock = Math.max(0, time)
   if (action !== 'all') {
-    const p = (1 - Math.cos(tau * clock / (action === 'boom' ? 8 : 5.3))) / 2
+    const p = (1 - Math.cos(tau * clock / singleCycleSeconds(action))) / 2
     return available.includes(action) ? { [action]: p } : {}
   }
   // Cycle one motion at a time; the quay parking boom never runs during cargo handling.
   const sequence = available.filter(id => id !== 'boom')
   if (!sequence.length) return {}
-  const duration = 3.4
-  const active = sequence[Math.floor(clock / duration) % sequence.length]
-  const phase = (clock % duration) / duration
+  const active = sequence[Math.floor(clock / segmentSeconds) % sequence.length]
+  const phase = (clock % segmentSeconds) / segmentSeconds
   return { [active]: (1 - Math.cos(tau * phase)) / 2 }
 }
 
