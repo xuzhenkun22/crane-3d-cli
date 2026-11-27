@@ -24,11 +24,16 @@ const direction = {
   top: new T.Vector3(0, 1, 0.001).normalize(),
 }
 
+const kbkWorkshopDirection = new T.Vector3(0.25, 0.06, 1).normalize()
+
 function frameModel(view = 'iso', preserveAngle = false) {
   if (!model || width <= 1 || height <= 1) return
   fitView = view
   const center = model.bounds.getCenter(new T.Vector3())
-  const normal = preserveAngle ? camera.position.clone().sub(controls.target).normalize() : direction[view] ?? direction.iso
+  // A lower view down the aisle keeps the red bridges visible under the steelwork.
+  const defaultDirection = view === 'iso' && props.product.model.kind === 'kbk' && !props.product.model.monorail
+    ? kbkWorkshopDirection : direction[view] ?? direction.iso
+  const normal = preserveAngle ? camera.position.clone().sub(controls.target).normalize() : defaultDirection
   const right = new T.Vector3().crossVectors(new T.Vector3(0, 1, 0), normal).normalize()
   const up = new T.Vector3().crossVectors(normal, right).normalize()
   const vf = Math.tan(T.MathUtils.degToRad(camera.fov / 2))
@@ -159,7 +164,7 @@ function rebuild(shouldFit) {
   Object.assign(sun.shadow.camera, { left: -range, right: range, top: range, bottom: -range, near: 0.5, far: worldSize * 4 })
   sun.shadow.camera.updateProjectionMatrix()
   dirtyShadow = true
-  setTexture(model.rated, ratingTexture(props.config))
+  setTexture(model.rated, ratingTexture(props.config, props.product.model.kind === 'kbk'))
   brandingReady = updateBranding()
   if (shouldFit) frameModel(fitView)
 }

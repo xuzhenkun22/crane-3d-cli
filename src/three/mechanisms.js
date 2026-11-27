@@ -1,3 +1,4 @@
+import { buildKbk } from './kbk.js'
 import { buildLifting } from './lifting.js'
 
 const clamp = (v, min, max) => Math.min(max, Math.max(min, v))
@@ -13,7 +14,8 @@ export function buildMechanisms(api, profile, d, config) {
 
   function makeLift(parent, settings) {
     const pose = buildLifting(api, parent, profile, d, { floorY, height: config.height, ...settings })
-    lifts.push(pose)
+    if (settings.parked) pose({})
+    else lifts.push(pose)
   }
   function suspension(length, x, cy, z, parent, unit, overhead = false) {
     const u = unit
@@ -45,25 +47,14 @@ export function buildMechanisms(api, profile, d, config) {
   }
 
   function overhead() {
-    const kbk = profile.kind === 'kbk'
-    const y = nominalY, u = kbk ? Math.min(0.43, width * 0.18) * size : Math.min(size, width * 0.27)
-    floorY = kbk ? 0 : Math.max(0, y - Math.max(3.5, config.height * 0.81 + 1))
+    const y = nominalY, u = Math.min(size, width * 0.27)
+    floorY = Math.max(0, y - Math.max(3.5, config.height * 0.81 + 1))
     const xLimit = width / 2 - u * 0.78
-    if (profile.monorail) {
-      suspension(width, 0, y, 0, railway, u, true)
-      for (const sign of [-1, 1]) {
-        bar(v(sign * width * 0.35, y + 0.24 * u, 0), v(sign * width * 0.35, y + 0.99 * u, 0), u * 0.21, u * 0.19, steel, railway)
-        box(u * 0.70, 0.12 * u, u * 0.65, sign * width * 0.35, y + 0.99 * u, 0, dark, railway)
-      }
-      plaque(0, y + 0.19 * u, 0.31 * u, width * 0.55, 0.29 * u, railway)
-      makeLift(railway, { start: -xLimit * 0.36, end: xLimit, y, unit: u })
-      return
-    }
     const top = profile.double && (!profile.suspended || profile.winch)
-    const gap = profile.double ? Math.min(kbk ? width * 0.15 : width * 0.19, (kbk ? 0.95 : 1.30) * u) : 0
-    const depth = (kbk ? 0.52 : 0.79) * u, h = kbk ? Math.min(0.36, g * 0.63) : g
+    const gap = profile.double ? Math.min(width * 0.19, 1.30 * u) : 0
+    const depth = 0.79 * u, h = g
     const bridgeLength = width + u * 0.62
-    const deckZ = Math.min(width * 0.45, kbk ? Math.max(3, gap * 3.0) : 4.7 * u)
+    const deckZ = Math.min(width * 0.45, 4.7 * u)
     const trackLength = deckZ + 2 * Math.max(width * 0.16, u * 1.45)
     travel = (trackLength - deckZ) * 0.43
     const face = profile.suspended ? y + h * 0.52 + 0.77 * u : y - h * 0.55 - 0.58 * u
@@ -80,7 +71,7 @@ export function buildMechanisms(api, profile, d, config) {
       box(0.64 * u, Math.abs(face - truckMount) * 0.75, (profile.double ? gap * 2 + 0.32 * u : 0.69 * u), x, truckMount + (face - truckMount) * 0.31, 0, shade, frame)
       if (profile.suspended) for (const z of [-0.44, 0.44]) {
         const zz = z * trackLength
-        const barTop = face + u * (kbk ? 1.15 : 1.35)
+        const barTop = face + 1.35 * u
         box(u * 0.34, barTop - face, u * 0.34, x, (barTop + face) / 2, zz, steel, railway)
         box(u * 0.70, u * 0.12, u * 0.74, x, barTop, zz, dark, railway)
       }
@@ -93,7 +84,7 @@ export function buildMechanisms(api, profile, d, config) {
     if (!top) {
       suspension(width + u * 0.12, 0, runningY, runningZ, frame, u)
       if (profile.double && !profile.offset) for (const x of [-width * 0.41, 0, width * 0.41]) box(u * 0.27, u * 0.19, 2.04 * gap, x, runningY + 0.22 * u, 0, shade, frame)
-      if (!kbk) festoon(width * 0.82, y - h * 0.28, runningZ + depth * 0.52, frame)
+      festoon(width * 0.82, y - h * 0.28, runningZ + depth * 0.52, frame)
     }
     doubleLift(frame, { left: -xLimit, right: xLimit, y: runningY + (!top && profile.compact ? u * 0.02 : 0), z: runningZ, top, gap, unit: u })
   }
@@ -410,7 +401,11 @@ export function buildMechanisms(api, profile, d, config) {
     }
   }
 
-  if (['bridge', 'kbk'].includes(profile.kind)) overhead()
+  if (profile.kind === 'kbk') {
+    const kbk = buildKbk(api, profile, d, { railway, frame, makeLift })
+    travel = kbk.travel
+    poseArms = kbk.poseTravel
+  } else if (profile.kind === 'bridge') overhead()
   else if (['gantry', 'yard', 'shipyard'].includes(profile.kind)) makeGantry()
   else if (profile.kind === 'jib') jib()
   else if (profile.kind === 'hoist') standaloneHoist()

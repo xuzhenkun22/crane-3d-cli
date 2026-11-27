@@ -10,14 +10,15 @@ export function buildCrane(product, config) {
   const main = new T.Color(config.color)
   const mat = (color, metalness = 0.25, roughness = 0.46) => new T.MeshStandardMaterial({ color, metalness, roughness })
   const paint = mat(main), edge = mat(main.clone().multiplyScalar(1.23)), shade = mat(main.clone().multiplyScalar(0.67))
-  const dark = mat('#27313a', 0.44), steel = mat('#667582', 0.47, 0.36), bolt = mat('#a7adb0', 0.54)
-  const teal = mat('#33756b', 0.27), tealDark = mat('#21514d', 0.32), rubber = mat('#171c20', 0.18)
+  const kbk = profile.kind === 'kbk'
+  const dark = mat('#27313a', 0.44), steel = mat(kbk ? '#50565a' : '#667582', 0.47, 0.36), bolt = mat('#a7adb0', 0.54)
+  const teal = mat(kbk ? '#28739a' : '#33756b', 0.27), tealDark = mat(kbk ? '#17435b' : '#21514d', 0.32), rubber = mat('#171c20', 0.18)
   const safety = mat('#e8bc5f'), copper = mat('#8e7458', 0.36), wire = mat('#313a3d', 0.3)
   const glass = mat('#527b89', 0.46, 0.22)
   const mats = { paint, edge, shade, dark, steel, bolt, teal, tealDark, rubber, safety, copper, wire, glass }
   const anchors = [], brands = [], rated = []
   const unitBox = new T.BoxGeometry(), unitCylinder = new T.CylinderGeometry(1, 1, 1, 16), placard = new T.PlaneGeometry(1, 1)
-  let unitLink
+  let unitLink, lightPlateMaterial
   const v = (x, y, z) => new T.Vector3(x, y, z)
 
   function mesh(geo, material, x, y, z, parent = root) {
@@ -87,6 +88,13 @@ export function buildCrane(product, config) {
     surface(x + width * 0.11, y, z + 0.025, bw, height * 0.86, brands, parent)
     box(rw * 1.06, height * 0.62, 0.02, x - width * 0.376, y, z + 0.019, dark, parent)
     surface(x - width * 0.376, y, z + 0.035, rw, height * 0.52, rated, parent)
+  }
+  function lightPlaque(x, y, z, width, height, parent, showBrand = false) {
+    lightPlateMaterial ??= mat('#eeeae1', 0.08)
+    const w = Math.min(width * 0.44, height * 3.0)
+    box(w, height * 0.86, 0.016, x, y, z, lightPlateMaterial, parent).name = 'kbk-capacity-plate'
+    surface(x, y, z + 0.010, w * 0.92, height * 0.76, rated, parent)
+    if (showBrand) surface(x - width * 0.44, y, z + 0.010, width * 0.51, height * 0.90, brands, parent)
   }
   function girder(length, x, y, z, depth, h, decorated, parent, truss = false) {
     if (truss) {
@@ -168,7 +176,7 @@ export function buildCrane(product, config) {
     }
   }
 
-  const rig = buildMechanisms({ root, v, group, box, cylinder, chainLink, bar, fitBar, tube, rail, girder, plaque, baseTruck, ladder, festoon, label, ...mats }, profile, dimensions, config)
+  const rig = buildMechanisms({ root, v, group, box, cylinder, chainLink, bar, fitBar, tube, rail, girder, plaque, lightPlaque, baseTruck, ladder, festoon, label, ...mats }, profile, dimensions, config)
   const available = actionsFor(product, config).map(action => action.id)
   function pose(time = 0, action = 'all') {
     rig.pose(mechanismProgress(time, action, available))
@@ -262,16 +270,17 @@ function textureFromCanvas(canvas) {
   return texture
 }
 
-export function ratingTexture(config) {
+export function ratingTexture(config, lightPlate = false) {
   const c = document.createElement('canvas')
   c.width = 480
   c.height = 120
   const ctx = c.getContext('2d')
   ctx.font = 'bold 88px "Segoe UI", sans-serif'
-  ctx.fillStyle = '#f6efe3'
+  ctx.fillStyle = lightPlate ? '#202321' : '#f6efe3'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText(`${config.capacity} t`, c.width / 2, c.height / 2 + 3)
+  const rating = lightPlate && config.capacity < 1 ? `${Math.round(config.capacity * 1000)} kg` : `${config.capacity} t`
+  ctx.fillText(rating, c.width / 2, c.height / 2 + 3, c.width - 16)
   return textureFromCanvas(c)
 }
 

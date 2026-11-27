@@ -6,14 +6,14 @@ export function buildLifting(api, parent, profile, dimensions, settings) {
   const { root, group, v, box, cylinder, chainLink, tube, bar, label, tealDark, steel, bolt, paint, edge, dark, wire, safety, shade } = api
   const { id = 'primary', start, end = start, z = 0, y, top = false, gap = 0, fixed = false, remote = false, branded = false,
     tool = profile.tool, trolleyAction = 'trolley', liftAction = 'lift', floorY = 0, height, unit = dimensions.trolley,
-    aux = false, parkedX = null, toolWidth = 0, labelText } = settings
+    aux = false, parkedX = null, toolWidth = 0, labelText, buildRunningGear, showLabels = true } = settings
   const u = Math.max(0.16, unit)
   const carriage = remote ? parent : group(`trolley-${id}`, parent, start, y, z)
   const machineryY = top ? u * (profile.winch ? 0.73 : 0.59) : -u * (profile.winch ? 0.65 : profile.compact ? 0.40 : 0.53)
   const offsets = aux ? [-u * 0.24, u * 0.46] : [0]
-  const wheels = remote ? [] : buildCarriage(api, carriage, u, { top, gap, fixed, winch: profile.winch })
+  const wheels = remote ? [] : buildRunningGear?.(carriage) ?? buildCarriage(api, carriage, u, { top, gap, fixed, winch: profile.winch })
   const drums = remote ? [] : buildHoistHardware(api, carriage, profile, u, machineryY, { top, aux, branded })
-  if (!remote) {
+  if (!remote && showLabels) {
     const title = profile.winch ? '卷扬起重小车' : profile.chain ? '环链葫芦' : fixed ? '固定式钢丝绳葫芦' : '钢丝绳电动葫芦'
     label(labelText ?? title, 0, machineryY, 0.53 * u, carriage)
   }
@@ -86,7 +86,7 @@ export function buildLifting(api, parent, profile, dimensions, settings) {
       }
     }
     const toolName = { hook: '吊钩', foundry: '铸造吊钩', grab: '抓斗', magnet: '电磁吊具', spreader: '集装箱吊具', sling: '吊带' }
-    label(index ? '副吊钩' : toolName[kind], 0, 0.04, 0.3 * scale, tackle)
+    if (showLabels) label(index ? '副吊钩' : toolName[kind], 0, 0.04, 0.3 * scale, tackle)
     const chain = profile.chain ? Array.from({ length: 48 }, (_, i) => {
       const link = chainLink(hanger, steel)
       link.name = 'chain-link'

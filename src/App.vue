@@ -287,29 +287,20 @@ onBeforeUnmount(() => {
 
 <template>
   <main class="shell" id="workspace">
-    <header class="intro" :inert="fallbackExpanded">
-      <h1 id="main-title">起重机 <span>3D</span> 在线选型</h1>
-    </header>
-
-    <div class="workbench">
-      <section id="preview" ref="stage" class="stage panel" :class="{ 'stage-expanded': expanded, 'stage-wide': widePreview }" :role="fallbackExpanded ? 'dialog' : undefined" :aria-modal="fallbackExpanded ? true : undefined" aria-label="三维预览">
-        <div class="stage-meta">
-          <div class="stage-heading"><Box :size="17" /> <strong>三维预览</strong><span class="live-tag"><i></i> 实时</span></div>
-          <div class="scene-title">
-            <p><i></i><span>{{ product.code }}</span><span class="title-separator"></span>{{ product.category }}</p>
-            <div class="model-name"><h2>{{ previewName(product, currentModel) }}</h2><span v-if="currentModel.winch" class="reference-tag">卷扬起重小车</span><span v-if="currentModel.reference" class="reference-tag">参考构型</span></div>
-            <span class="scene-description">{{ product.description }}</span>
-          </div>
+    <section id="preview" ref="stage" class="stage panel" :class="{ 'stage-expanded': expanded, 'stage-wide': widePreview }" :role="fallbackExpanded ? 'dialog' : undefined" :aria-modal="fallbackExpanded ? true : undefined" aria-label="三维预览">
+      <header class="stage-meta">
+        <h1 id="main-title">起重机 <span>3D</span> 在线选型</h1>
+        <div class="stage-heading"><Box :size="16" /> <strong>三维预览</strong><span class="live-tag"><i></i> 实时</span></div>
+        <div class="scene-title">
+          <span class="model-code">{{ product.code }}</span>
+          <h2 :title="`${previewName(product, currentModel)} · ${product.description}`">{{ previewName(product, currentModel) }}</h2>
+          <span class="model-category">{{ product.category }}</span>
+          <span v-if="currentModel.winch" class="reference-tag winch-tag">卷扬起重小车</span>
+          <span v-if="currentModel.reference" class="reference-tag">参考构型</span>
         </div>
-        <div class="preview-toolbar" role="group" aria-label="三维预览工具">
-          <div class="view-tools" role="group" aria-label="视角与缩放">
-            <button v-for="view in viewModes" :key="view.id" class="button tiny view-mode" type="button" :aria-pressed="mode === view.id" @click="setView(view.id)">{{ view.label }}</button>
-            <button class="button tiny tool-icon" type="button" title="缩小" aria-label="缩小" @click="viewer?.zoom(1.15)"><Minus :size="15" /></button>
-            <button class="button tiny tool-icon" type="button" title="放大" aria-label="放大" @click="viewer?.zoom(0.87)"><Plus :size="15" /></button>
-            <button class="button tiny tool-icon" type="button" title="重置视角" aria-label="重置视角" @click="setView('iso')"><RotateCcw :size="14" /></button>
-          </div>
-          <button class="button tiny" type="button" :aria-pressed="rotating" @click="rotating = !rotating"><RotateCw :size="14" /> 自动旋转</button>
-          <button class="button tiny" type="button" :aria-pressed="annotated" @click="annotated = !annotated"><Crosshair :size="14" /> 结构标注</button>
+      </header>
+      <div class="scene">
+        <div class="preview-toolbar scene-actions" role="group" aria-label="演示与导出工具">
           <div class="motion-tools" role="group" aria-label="动作控制">
             <label class="select-wrap motion-select">
               <span class="visually-hidden">演示机构</span>
@@ -326,7 +317,7 @@ onBeforeUnmount(() => {
           <button class="button tiny export-button" type="button" @click="exportSelection"><ArrowDownToLine :size="15" /> 导出配置</button>
           <button ref="fullscreenButton" class="button tiny fullscreen-button" type="button" @click="toggleFullscreen"><Minimize v-if="expanded" :size="15" /><Expand v-else :size="15" />{{ expanded ? '退出全屏' : '全屏' }}</button>
         </div>
-        <div class="scene" :class="{ 'with-catalog': catalogOpen, 'with-config': configOpen }">
+        <div class="scene-body" :class="{ 'with-catalog': catalogOpen, 'with-config': configOpen }">
           <CraneViewer ref="viewer" :product="product" :config="config" :rotating="rotating" :playing="playing" :action="action" :annotated="annotated" :focus-region="focusRegion" />
           <div ref="focusRegion" class="preview-safe-region" aria-hidden="true"></div>
           <div class="preview-overlays">
@@ -409,11 +400,18 @@ onBeforeUnmount(() => {
       </aside>
           </div>
         </div>
-        <div class="stage-footer"><span><span class="footer-light"></span> 可交互模型</span><span class="gesture">拖动旋转 · 滚轮缩放 · 右键平移</span><span class="footer-code">{{ product.code }} / 3D MODEL</span></div>
-        <div class="toast" role="status" :class="{ visible: message }"><Check :size="15" />{{ message }}</div>
-      </section>
-    </div>
-
-    <footer class="page-footer" :inert="fallbackExpanded">模型与参数仅供选型预览，不作为工程校核或正式规格。</footer>
+      </div>
+      <div class="preview-toolbar scene-controls" role="group" aria-label="视角与标注工具">
+        <div class="view-tools" role="group" aria-label="视角与缩放">
+          <button v-for="view in viewModes" :key="view.id" class="button tiny view-mode" type="button" :aria-pressed="mode === view.id" @click="setView(view.id)">{{ view.label }}</button>
+          <button class="button tiny tool-icon" type="button" title="缩小" aria-label="缩小" @click="viewer?.zoom(1.15)"><Minus :size="15" /></button>
+          <button class="button tiny tool-icon" type="button" title="放大" aria-label="放大" @click="viewer?.zoom(0.87)"><Plus :size="15" /></button>
+          <button class="button tiny tool-icon" type="button" title="重置视角" aria-label="重置视角" @click="setView('iso')"><RotateCcw :size="14" /></button>
+        </div>
+        <button class="button tiny" type="button" :aria-pressed="rotating" @click="rotating = !rotating"><RotateCw :size="14" /> 自动旋转</button>
+        <button class="button tiny" type="button" :aria-pressed="annotated" @click="annotated = !annotated"><Crosshair :size="14" /> 结构标注</button>
+      </div>
+      <div class="toast" role="status" :class="{ visible: message }"><Check :size="15" />{{ message }}</div>
+    </section>
   </main>
 </template>

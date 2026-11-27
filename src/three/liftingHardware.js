@@ -101,6 +101,16 @@ export function buildHoistHardware(api, parent, profile, u, y, { top, aux, brand
     B(0.37, 0.35, 0.24, 0.40, 0.01, -0.50, dark)
     B(0.17, 0.11, 0.020, 0.40, 0.06, -0.626, safety)
     if (aux) drum(0.46, 0.07, 0.59, 0.18, 0.38)
+  } else if (profile.kind === 'kbk' && profile.chain) {
+    motor(0.22, 0.014, -0.18, 0.252, 0.55)
+    // Rounded blue cover faces the operator; the black chain bag hangs beside it.
+    for (const [r, depth, z, material] of [[0.32, 0.41, 0.03, casingEdge], [0.288, 0.20, 0.275, casing]]) {
+      B(r * 2, 0.23, depth - 0.002, 0, 0, z, material)
+      for (const yy of [-0.115, 0.115]) C(r, depth, 0, yy, z, material, 'z')
+    }
+    B(0.20, 0.103, 0.012, 0, 0.15, 0.381, bolt)
+    B(0.31, 0.38, 0.32, -0.31, -0.37, -0.045, rubber).rotation.z = -0.12
+    B(0.32, 0.07, 0.33, -0.33, -0.19, -0.045, dark)
   } else if (profile.chain) {
     B(0.62, 0.43, 0.46, -0.06, 0, 0, casing)
     gearbox(0.26, 0, 0, 0.226)
