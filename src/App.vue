@@ -1,6 +1,6 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { ArrowDownToLine, ArrowRight, Box, Check, ChevronDown, Crosshair, Expand, Film, ImageDown, ImagePlus, Layers3, Minimize, Minus, Play, Plus, RotateCcw, RotateCw, Search, SlidersHorizontal, Type, X, Pause } from '@lucide/vue'
+import { ArrowDownToLine, ArrowRight, Box, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Crosshair, Expand, Film, ImageDown, ImagePlus, Layers3, Minimize, Minus, Play, Plus, RotateCcw, RotateCw, Search, SlidersHorizontal, Type, X, Pause } from '@lucide/vue'
 import CraneViewer from './components/CraneViewer.vue'
 import ProductGlyph from './components/ProductGlyph.vue'
 import { CATEGORIES, COLORS, DEFAULT_PRODUCT, HOIST_CAPACITY_LIMIT, PRODUCTS, actionsFor, defaultConfig, fieldsFor, matchesProduct, normalizeColor, previewName, resolvedModel, selectionRecord, validateParameter } from './domain/products.js'
@@ -289,37 +289,52 @@ onBeforeUnmount(() => {
   <main class="shell" id="workspace">
     <header class="intro" :inert="fallbackExpanded">
       <h1 id="main-title">起重机 <span>3D</span> 在线选型</h1>
-      <div class="export-actions">
-        <button class="button export-button" type="button" @click="exportSelection"><ArrowDownToLine :size="16" /> 导出配置</button>
-        <button class="button export-button" type="button" :disabled="exportingImage || gifProgress !== null || busy" @click="exportImage"><ImageDown :size="16" /> {{ exportingImage ? '正在导出…' : '导出选型图片' }}</button>
-      </div>
     </header>
 
     <div class="workbench">
       <section id="preview" ref="stage" class="stage panel" :class="{ 'stage-expanded': expanded, 'stage-wide': widePreview }" :role="fallbackExpanded ? 'dialog' : undefined" :aria-modal="fallbackExpanded ? true : undefined" aria-label="三维预览">
-        <div class="stage-header">
-          <div class="stage-heading"><Box :size="17" /> <strong>三维预览</strong><span class="live-tag"><i></i> 实时</span></div>
-          <div class="stage-actions">
-            <button class="button tiny stage-option" type="button" title="自动旋转" aria-label="自动旋转" :aria-pressed="rotating" @click="rotating = !rotating"><RotateCw :size="14" /> <span>自动旋转</span></button>
-            <button class="button tiny stage-option" type="button" title="结构标注" aria-label="结构标注" :aria-pressed="annotated" @click="annotated = !annotated"><Crosshair :size="14" /> <span>结构标注</span></button>
-            <button ref="fullscreenButton" class="button tiny fullscreen-button" type="button" @click="toggleFullscreen"><Minimize v-if="expanded" :size="15" /><Expand v-else :size="15" />{{ expanded ? '退出全屏' : '全屏' }}</button>
-          </div>
-        </div>
         <div class="stage-meta">
+          <div class="stage-heading"><Box :size="17" /> <strong>三维预览</strong><span class="live-tag"><i></i> 实时</span></div>
           <div class="scene-title">
             <p><i></i><span>{{ product.code }}</span><span class="title-separator"></span>{{ product.category }}</p>
             <div class="model-name"><h2>{{ previewName(product, currentModel) }}</h2><span v-if="currentModel.winch" class="reference-tag">卷扬起重小车</span><span v-if="currentModel.reference" class="reference-tag">参考构型</span></div>
             <span class="scene-description">{{ product.description }}</span>
           </div>
-          <div class="preview-panel-tools" role="group" aria-label="预览面板">
-            <button class="button tiny" type="button" aria-controls="products" :aria-expanded="catalogOpen" @click="togglePanel('catalog')"><Layers3 :size="14" /> 产品系列</button>
-            <button class="button tiny" type="button" aria-controls="configuration" :aria-expanded="configOpen" @click="togglePanel('config')"><SlidersHorizontal :size="14" /> 选型配置</button>
+        </div>
+        <div class="preview-toolbar" role="group" aria-label="三维预览工具">
+          <div class="view-tools" role="group" aria-label="视角与缩放">
+            <button v-for="view in viewModes" :key="view.id" class="button tiny view-mode" type="button" :aria-pressed="mode === view.id" @click="setView(view.id)">{{ view.label }}</button>
+            <button class="button tiny tool-icon" type="button" title="缩小" aria-label="缩小" @click="viewer?.zoom(1.15)"><Minus :size="15" /></button>
+            <button class="button tiny tool-icon" type="button" title="放大" aria-label="放大" @click="viewer?.zoom(0.87)"><Plus :size="15" /></button>
+            <button class="button tiny tool-icon" type="button" title="重置视角" aria-label="重置视角" @click="setView('iso')"><RotateCcw :size="14" /></button>
           </div>
+          <button class="button tiny" type="button" :aria-pressed="rotating" @click="rotating = !rotating"><RotateCw :size="14" /> 自动旋转</button>
+          <button class="button tiny" type="button" :aria-pressed="annotated" @click="annotated = !annotated"><Crosshair :size="14" /> 结构标注</button>
+          <div class="motion-tools" role="group" aria-label="动作控制">
+            <label class="select-wrap motion-select">
+              <span class="visually-hidden">演示机构</span>
+              <select v-model="action" @change="playing = false"><option value="all">整机循环</option><option v-for="motion in actions" :key="motion.id" :value="motion.id">{{ motion.label }}</option></select><ChevronDown :size="13" />
+            </label>
+            <button class="button tiny amber" type="button" :aria-pressed="playing" @click="playing = !playing">
+              <Pause v-if="playing" :size="15" fill="currentColor" /><Play v-else :size="15" fill="currentColor" />{{ playing ? '暂停演示' : '动作演示' }}
+            </button>
+          </div>
+          <button class="button tiny gif-button export-button" type="button" :disabled="gifProgress !== null || exportingImage || busy || !actions.length" :aria-busy="gifProgress !== null" title="将当前所选动作导出为循环 GIF 动图" @click="exportGif">
+            <Film :size="15" />{{ gifProgress === null ? '导出 GIF' : `GIF ${gifProgress}%` }}
+          </button>
+          <button class="button tiny export-button" type="button" :disabled="exportingImage || gifProgress !== null || busy" @click="exportImage"><ImageDown :size="15" /> {{ exportingImage ? '正在导出…' : '导出图片' }}</button>
+          <button class="button tiny export-button" type="button" @click="exportSelection"><ArrowDownToLine :size="15" /> 导出配置</button>
+          <button ref="fullscreenButton" class="button tiny fullscreen-button" type="button" @click="toggleFullscreen"><Minimize v-if="expanded" :size="15" /><Expand v-else :size="15" />{{ expanded ? '退出全屏' : '全屏' }}</button>
         </div>
         <div class="scene" :class="{ 'with-catalog': catalogOpen, 'with-config': configOpen }">
           <CraneViewer ref="viewer" :product="product" :config="config" :rotating="rotating" :playing="playing" :action="action" :annotated="annotated" :focus-region="focusRegion" />
           <div ref="focusRegion" class="preview-safe-region" aria-hidden="true"></div>
           <div class="preview-overlays">
+            <button class="pane-toggle catalog-toggle" type="button" aria-controls="products" :aria-expanded="catalogOpen" :aria-label="catalogOpen ? '收起产品系列' : '展开产品系列'" :title="catalogOpen ? '收起产品系列' : '展开产品系列'" @click="togglePanel('catalog')">
+              <Layers3 v-if="!catalogOpen" class="pane-icon" :size="15" aria-hidden="true" />
+              <component :is="catalogOpen ? ChevronLeft : ChevronRight" class="pane-arrow-side" :size="17" aria-hidden="true" />
+              <component :is="catalogOpen ? ChevronDown : ChevronUp" class="pane-arrow-drawer" :size="17" aria-hidden="true" />
+            </button>
       <section v-show="catalogOpen" class="catalog panel" id="products" aria-labelledby="catalog-title">
         <div class="catalog-header">
           <Layers3 :size="17" />
@@ -347,6 +362,11 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
+            <button class="pane-toggle config-toggle" type="button" aria-controls="configuration" :aria-expanded="configOpen" :aria-label="configOpen ? '收起选型配置' : '展开选型配置'" :title="configOpen ? '收起选型配置' : '展开选型配置'" @click="togglePanel('config')">
+              <SlidersHorizontal v-if="!configOpen" class="pane-icon" :size="15" aria-hidden="true" />
+              <component :is="configOpen ? ChevronRight : ChevronLeft" class="pane-arrow-side" :size="17" aria-hidden="true" />
+              <component :is="configOpen ? ChevronDown : ChevronUp" class="pane-arrow-drawer" :size="17" aria-hidden="true" />
+            </button>
       <aside v-show="configOpen" id="configuration" class="config panel" aria-labelledby="config-title">
         <div class="config-header">
           <span class="config-icon"><SlidersHorizontal :size="18" /></span>
@@ -387,27 +407,6 @@ onBeforeUnmount(() => {
           </section>
         </div>
       </aside>
-          </div>
-        </div>
-        <div class="stage-bottom">
-          <div class="motion-tools">
-            <label class="select-wrap motion-select">
-              <span class="visually-hidden">演示机构</span>
-              <select v-model="action" @change="playing = false"><option value="all">整机循环</option><option v-for="motion in actions" :key="motion.id" :value="motion.id">{{ motion.label }}</option></select><ChevronDown :size="13" />
-            </label>
-            <button class="button amber play-button" type="button" :aria-pressed="playing" @click="playing = !playing">
-              <Pause v-if="playing" :size="15" fill="currentColor" /><Play v-else :size="15" fill="currentColor" />{{ playing ? '暂停演示' : '动作演示' }}
-            </button>
-            <button class="button gif-button" type="button" :disabled="gifProgress !== null || exportingImage || busy || !actions.length" :aria-busy="gifProgress !== null" title="将当前所选动作导出为循环 GIF 动图" @click="exportGif">
-              <Film :size="15" />{{ gifProgress === null ? '导出 GIF' : `GIF ${gifProgress}%` }}
-            </button>
-          </div>
-          <div class="view-tools" aria-label="视角与缩放工具">
-            <button v-for="view in viewModes" :key="view.id" class="view-mode" type="button" :aria-pressed="mode === view.id" @click="setView(view.id)">{{ view.label }}</button>
-            <i></i>
-            <button class="icon-button" type="button" title="缩小" aria-label="缩小" @click="viewer?.zoom(1.15)"><Minus :size="15" /></button>
-            <button class="icon-button" type="button" title="放大" aria-label="放大" @click="viewer?.zoom(0.87)"><Plus :size="15" /></button>
-            <button class="icon-button" type="button" title="重置视角" aria-label="重置视角" @click="setView('iso')"><RotateCcw :size="14" /></button>
           </div>
         </div>
         <div class="stage-footer"><span><span class="footer-light"></span> 可交互模型</span><span class="gesture">拖动旋转 · 滚轮缩放 · 右键平移</span><span class="footer-code">{{ product.code }} / 3D MODEL</span></div>
